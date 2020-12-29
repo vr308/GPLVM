@@ -1,4 +1,4 @@
-# GPLVM_torch
+# GPLVM: Core Models 
 
 Implementation of Gaussian Process Latent Variable models in pytorch/gpytorch
 
