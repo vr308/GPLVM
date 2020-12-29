@@ -1,4 +1,23 @@
 # GPLVM_torch
+
 Implementation of GPLVM and Bayesian GPLVM in pytorch/gpytorch
 
-Test
+
+Models 
+
+-------------
+
+
+Inference
+
+-------------
+
+
+Code Layout 
+
+---------------
+
+
+Usage
+
+------------
