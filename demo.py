@@ -9,6 +9,7 @@ from data.unsupervised_datasets import load_unsupervised_data
 from models.gplvm import GPLVM
 from matplotlib import pyplot as plt
 import torch
+import numpy as np
 from gpytorch.mlls import VariationalELBO
 from gpytorch.priors import NormalPrior
 
@@ -28,10 +29,15 @@ if __name__ == '__main__':
     
     # Declaring model with initial inducing inputs and latent prior
     
-    inducing_inputs = torch.randn(n_data_dims, n_inducing, n_latent_dims)
     latent_prior = NormalPrior(X_prior_mean, torch.ones_like(X_prior_mean))
-    model = GPLVM(Y = Y.T, inducing_inputs = inducing_inputs, pca = True, X_init = None, latent_dim = n_latent_dims, 
-                  latent_prior = None)
+    model = GPLVM(Y = Y.T, 
+                  latent_dim = n_latent_dims,
+                  n_inducing = n_inducing, 
+                  X_init = None, 
+                  pca = True, 
+                  latent_prior = None,
+                  kernel = None,
+                  likelihood = None)
    
     # Declaring objective to be optimised along with optimiser
     
@@ -43,7 +49,7 @@ if __name__ == '__main__':
     
     # Training loop
     
-    losses = model.run(mll, optimizer, steps=1000)
+    losses = model.run(mll, optimizer, steps=2000)
     
     # Plot result
     

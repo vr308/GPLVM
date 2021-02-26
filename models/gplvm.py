@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-@author: vr308
-
-"""
 
 from gpytorch.models import ApproximateGP
 from gpytorch.means import ConstantMean
@@ -12,16 +8,14 @@ from gpytorch.distributions import MultivariateNormal
 from gpytorch.likelihoods import GaussianLikelihood
 from gpytorch.variational import VariationalStrategy
 from gpytorch.variational import CholeskyVariationalDistribution
-from tqdm.notebook import tqdm
 from tqdm import trange
 import torch
 import numpy as np
-from gpytorch.priors import NormalPrior
 
 __all__ = ['GPLVM']
 
 class GPLVM(ApproximateGP):
-    def __init__(self, Y, latent_dim, inducing_inputs, X_init=None, 
+    def __init__(self, Y, latent_dim, n_inducing, X_init=None, 
                  pca=True, latent_prior=None, kernel=None, likelihood=None):
         
         """The GPLVM model class for unsupervised learning. The current implementation 
@@ -34,9 +28,7 @@ class GPLVM(ApproximateGP):
         :param batch_shape (int): Size of the batch of GP mappings (D, one per dimension).
         :param latent_dim (int): Dimensionality of latent space.
         :param pca (bool): Whether to initialise with pca or zeros
-        :param inducing_inputs (torch.Tensor): Locations Z_{d} corresponding to u_{d}, 
-                                they can be randomly initialized or
-                                regularly placed with shape (D x n_inducing x latent_dim)
+        :param inducing_inputs (torch.Tensor): 
         :param latent_prior (gpytorch.priors): Can be None or Gaussian.
         :param kernel (gpytorch.kernel): The kernel that governs the GP mappings from
                                 latent to data space, can select any from standard choices.
@@ -47,13 +39,20 @@ class GPLVM(ApproximateGP):
         self.Y = Y
         self.batch_shape = torch.Size([Y.shape[0]])
         self.latent_dim = latent_dim
-        self.inducing_inputs = inducing_inputs
-        variational_distribution =  variational_distribution = CholeskyVariationalDistribution(inducing_inputs.size(-2), 
-                                                                                                batch_shape=self.batch_shape)
-        variational_strategy = VariationalStrategy(self, inducing_inputs, 
-                                                    variational_distribution, learn_inducing_locations=True)
+        self.n_inducing = n_inducing
+        
+        # Locations Z_{d} corresponding to u_{d}, they can be randomly initialized or 
+        # regularly placed with shape (D x n_inducing x latent_dim).
+        
+        self.inducing_inputs = torch.randn(Y.shape[0], self.n_inducing, self.latent_dim)
+        
+        # Sparse Variational Formulation
+        variational_distribution = CholeskyVariationalDistribution(self.inducing_inputs.size(-2), 
+                                                                batch_shape=self.batch_shape) #q(u)
+        variational_strategy = VariationalStrategy(self, self.inducing_inputs, 
+                                                    variational_distribution, 
+                                                    learn_inducing_locations=True)
         super(GPLVM, self).__init__(variational_strategy)
-        # TODO: what about learning X variationally?? with q(X)
         
         # Register X as a parameter and initialise either with PCA or fixed tensor
         # If none is provided, it reverts to 0s.
@@ -67,10 +66,11 @@ class GPLVM(ApproximateGP):
         
         self.register_parameter(name="X", parameter=self.X)
         
+        # Latent prior
         if latent_prior is not None:
               self.register_prior('prior_X', latent_prior, 'X')
 
-        # Mean and Covariance hyperparameters
+        # Kernel 
         self.mean_module = ConstantMean(ard_num_dims=latent_dim, 
                                         batch_shape=self.batch_shape)
         if kernel is None:
@@ -79,6 +79,7 @@ class GPLVM(ApproximateGP):
         else: 
             self.covar_module = kernel
         
+        # Data Likelihood
         if likelihood is None:
             self.likelihood = GaussianLikelihood(batch_shape=self.batch_shape)
         else:

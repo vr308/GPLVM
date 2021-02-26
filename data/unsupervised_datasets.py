@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 
-Utilities for loading unsupervised datasets for testing with GP-VAE / GP-GPLVM
+Utilities for loading unsupervised datasets for testing with the GPLVM
 
 """
 
