@@ -33,7 +33,11 @@ Code Layout
 
 ---------------
 
+data/*  has all the data loading utilities  
+models/* model classes 
 
 Usage
 
 ------------
+
+See demo.py
