@@ -21,6 +21,7 @@ import numpy as np
 from tqdm import trange
 from gpytorch.means import ConstantMean
 from gpytorch.mlls import VariationalELBO
+from gpytorch.priors import NormalPrior
 from gpytorch.likelihoods import GaussianLikelihood
 from gpytorch.variational import VariationalStrategy
 from gpytorch.variational import CholeskyVariationalDistribution
@@ -32,21 +33,30 @@ def _init_pca(Y, latent_dim):
     return torch.nn.Parameter(torch.matmul(Y, V[:,:latent_dim]))
 
 class My_GPLVM_Model(BayesianGPLVM):
-    
-     def __init__(self, n, data_dim, latent_dim, n_inducing, X):
-         
+     def __init__(self, n, data_dim, latent_dim, n_inducing, pca=False):
         self.batch_shape = torch.Size([data_dim])
         
         # Locations Z_{d} corresponding to u_{d}, they can be randomly initialized or 
         # regularly placed with shape (D x n_inducing x latent_dim).
-        
         self.inducing_inputs = torch.randn(data_dim, n_inducing, latent_dim)
     
         # Sparse Variational Formulation
         
-        q_u = CholeskyVariationalDistribution(latent_dim, batch_shape=self.batch_shape) 
+        q_u = CholeskyVariationalDistribution(n_inducing, batch_shape=self.batch_shape) 
         q_f = VariationalStrategy(self, self.inducing_inputs, q_u, learn_inducing_locations=True)
-        
+    
+        # Define prior for X
+        X_prior_mean = torch.zeros(Y.shape[0], latent_dim)  # shape: N x Q
+        prior_x = NormalPrior(X_prior_mean, torch.ones_like(X_prior_mean))
+    
+        # Initialise X with PCA or 0s.
+        if pca == True:
+             X_init = _init_pca(Y, latent_dim) # Initialise X to PCA 
+        else:
+             X_init = torch.nn.Parameter(torch.zeros(Y.shape[1], latent_dim))
+          
+        # LatentVariable (X)
+        X = VariationalLatentVariable(Y.shape[0], latent_dim, X_init, prior_x)
         super(My_GPLVM_Model, self).__init__(X, q_f)
         
         # Kernel 
@@ -67,36 +77,19 @@ if __name__ == '__main__':
     Y, n, d, labels = load_unsupervised_data('oilflow')
       
     # Setting shapes
-    
     N = len(Y)
     data_dim = Y.shape[1]
     latent_dim = 12
     n_inducing = 50
     pca = True
-    X_prior_mean = torch.zeros(Y.shape[0], latent_dim)  # shape: N x Q
-    
-    # Declaring model with initial inducing inputs and latent prior
-    
-    prior_x = torch.distributions.Normal(X_prior_mean, torch.ones_like(X_prior_mean))
-    
-    # Initialise X with PCA or 0s.
-      
-    if pca == True:
-         X_init = _init_pca(Y, latent_dim) # Initialise X to PCA 
-    else:
-         X_init = torch.nn.Parameter(torch.zeros(Y.shape[1], latent_dim))
-      
-    # LatentVariable initialisation
-    X = VariationalLatentVariable(Y.shape[0], latent_dim, X_init, prior_x) # G
     
     # Model
-    model = My_GPLVM_Model(N, data_dim, latent_dim, n_inducing, X)
+    model = My_GPLVM_Model(N, data_dim, latent_dim, n_inducing, pca=pca)
     
     # Likelihood
     likelihood = GaussianLikelihood(batch_shape=model.batch_shape)
 
     # Declaring objective to be optimised along with optimiser
-    
     mll = VariationalELBO(likelihood, model, num_data=len(Y))
     
     optimizer = torch.optim.Adam([
@@ -110,8 +103,8 @@ if __name__ == '__main__':
     iterator = trange(1000, leave=True)
     for i in iterator:
        optimizer.zero_grad()
-       sample = model.sample_latent_variable() # G
-       output = model.forward(sample)          # G
+       sample = model.sample_latent_variable()
+       output = model(sample)
        loss = -mll(output, Y.T).sum()
        loss_list.append(loss.item())
        iterator.set_description('Loss: ' + str(float(np.round(loss.item(),2))) + ", iter no: " + str(i))

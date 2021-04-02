@@ -25,21 +25,13 @@ class BayesianGPLVM(ApproximateGP):
         super(BayesianGPLVM, self).__init__(variational_strategy)
         
         # Assigning Latent Variable 
-        
         self.X = X 
-        self.register_added_loss_term("x_kl") # G
     
     def forward(self):
         raise NotImplementedError
           
-    def __call__(self, X):
-         
-        if type(self.X).__name__ == 'VariationalLatentVariable':       # G
-            self.update_added_loss_term('x_kl', self.X.x_kl)           # G       
-        
     def sample_latent_variable(self):
-        
-        sample = self.X.forward()
+        sample = self.X()
         return sample
     
     def get_trainable_param_names(self):
