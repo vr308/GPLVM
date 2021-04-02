@@ -14,12 +14,17 @@
 
 from data.unsupervised_datasets import load_unsupervised_data
 from models.bayesianGPLVM import BayesianGPLVM
+from models.latent_variable import *
 from matplotlib import pyplot as plt
 import torch
 import numpy as np
 from tqdm import trange
 from gpytorch.mlls import VariationalELBO
 from torch.distributions import kl_divergence
+
+def _init_pca(Y, latent_dim):
+    U, S, V = torch.pca_lowrank(Y, q = latent_dim)
+    return torch.nn.Parameter(torch.matmul(Y, V[:,:latent_dim]))
 
 if __name__ == '__main__':
 
@@ -32,25 +37,33 @@ if __name__ == '__main__':
     n_data_dims = Y.shape[1]
     n_latent_dims = 12
     n_inducing = 50
-    X_prior_mean = torch.nn.Parameter(torch.zeros(Y.shape[0], n_latent_dims))  # shape: N x Q
+    pca = True
+    X_prior_mean = torch.zeros(Y.shape[0], n_latent_dims)  # shape: N x Q
     
     # Declaring model with initial inducing inputs and latent prior
     
     prior_x = torch.distributions.Normal(X_prior_mean, torch.ones_like(X_prior_mean))
     
+    # Initialise X with PCA or 0s.
+      
+    if pca == True:
+         X_init = _init_pca(Y, n_latent_dims) # Initialise X to PCA 
+    else:
+         X_init = torch.nn.Parameter(torch.zeros(Y.shape[1],n_latent_dims))
+      
+    # LatentVariable initialisation
+    X = VariationalLatentVariable(Y.shape[0], n_latent_dims, X_init, prior_x)
+    
     model = BayesianGPLVM(Y = Y.T, 
+                  X = X,
                   latent_dim = n_latent_dims,
                   n_inducing = n_inducing, 
-                  X_init = None, 
-                  pca = True, 
-                  prior_x = prior_x,
                   kernel = None,
-                  likelihood = None,
-                  inference='variational')
+                  likelihood = None)
    
     # Declaring objective to be optimised along with optimiser
     
-    mll = VariationalELBO(model.likelihood, model, num_data=len(Y.T))
+    mll = VariationalELBO(model.likelihood, model, num_data=len(Y))
     
     optimizer = torch.optim.Adam([
     {'params': model.parameters()},
@@ -63,14 +76,9 @@ if __name__ == '__main__':
     iterator = trange(1000, leave=True)
     for i in iterator:
        optimizer.zero_grad()
-       if model.inference == 'variational':
-           sample = model.sample_variational_latent_dist() 
-           custom_terms = kl_divergence(model.q_x, prior_x).sum()
-       else: 
-           sample = model.X
-           custom_terms = None
+       sample = model.X.forward()
        output = model(sample)
-       loss = -(mll(output, model.Y, added_loss_terms = custom_terms).sum())
+       loss = -mll(output, model.Y).sum()
        loss_list.append(loss.item())
        iterator.set_description('Loss: ' + str(float(np.round(loss.item(),2))) + ", iter no: " + str(i))
        loss.backward()

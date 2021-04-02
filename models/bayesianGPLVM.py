@@ -12,22 +12,20 @@ import torch
 from prettytable import PrettyTable
 
 class BayesianGPLVM(ApproximateGP):
-    def __init__(self, Y, latent_dim, n_inducing, X_init=None, 
-                 pca=True, prior_x=None, kernel=None, likelihood=None, inference='variational'):
+    def __init__(self, Y, X, latent_dim, n_inducing, kernel=None, likelihood=None):
         
-        """The GPLVM model class for unsupervised learning. The current implementation 
-           can learn:
+        """The GPLVM model class for unsupervised learning. The current class supports
         
         (a) Point estimates for latent X when prior_x = None 
         (b) MAP Inference for X when prior_x is not None and inference == 'map'
         (c) Gaussian variational distribution q(X) when prior_x is not None and inference == 'variational'
 
         :param Y (torch.Tensor): The unsupervised data set of size D x N (N data points)
-        :param batch_shape (int): Size of the batch of GP mappings (D, one per dimension).
+        :param X (LatentVariable): An instance of a sub-class of the LatentVariable class.
+                                    One of PointLatentVariable / MAPLatentVariable / VariationalLatentVariable to
+                                    facilitate inference with (a), (b) or (c) respectively.
         :param latent_dim (int): Dimensionality of latent space.
-        :param pca (bool): Whether to initialise with pca / randn / zeros.
-        :param inducing_inputs (torch.Tensor): The inputs corresponding to the inducing variables.
-        :param prior_x (gpytorch.priors): Can be None or Gaussian.
+        :param n_inducing (torch.Tensor): Number of inducing variables.
         :param kernel (gpytorch.kernel): The kernel that governs the GP mappings from
                                 latent to data space, can select any from standard choices.
         :param likelihood (gpytorch.likelihoods): Gaussian likelihood for continuous targets,
@@ -39,7 +37,6 @@ class BayesianGPLVM(ApproximateGP):
         self.latent_dim = latent_dim
         self.n_inducing = n_inducing
         self.n = Y.shape[1]
-        self.inference = inference
         
         # Locations Z_{d} corresponding to u_{d}, they can be randomly initialized or 
         # regularly placed with shape (D x n_inducing x latent_dim).
@@ -56,36 +53,11 @@ class BayesianGPLVM(ApproximateGP):
         
         super(BayesianGPLVM, self).__init__(q_f)
         
-        # Initialise either with PCA or fixed tensor, if none is provided - it reverts to 0s.
+        # Assigning Latent Variable 
         
-        if pca == True:
-            X_init = self._init_pca() # Initialise X to PCA 
-        else:
-            if X_init is not None: 
-                X_init = torch.nn.Parameter(X_init) # Initialise X with a tensor of shape N x Q 
-            else:
-                X_init = torch.nn.Parameter(torch.zeros(Y.shape[1],latent_dim))
-                
-        
-        if self.inference == 'variational':
-            # Local variational params per latent point
-            self.q_mu = X_init
-            self.q_log_sigma = torch.nn.Parameter(torch.tensor(torch.randn(Y.shape[1],self.latent_dim)))
-        
-            # Variational distribution over the latent variable q(x)
-            self.q_x = torch.distributions.Normal(self.q_mu, torch.exp(self.q_log_sigma))
-  
-            # Q: can't figure out how to register a prior for x without x being a parameter.
-            self.prior_x = prior_x
-        
-        else:
-            # Learn latents as point estimates 
-            self.register_parameter('X', X_init)
-
-            if prior_x is not None: # MAP inference
-                self.prior_x = prior_x
-                #self.register_prior('prior_x', prior_x, 'X')
-            
+        self.X = X 
+        self.register_added_loss_term("x_kl")
+       
         # Kernel 
         self.mean_module = ConstantMean(ard_num_dims=latent_dim)
         if kernel is None:
@@ -100,6 +72,10 @@ class BayesianGPLVM(ApproximateGP):
             self.likelihood = likelihood
        
     def forward(self, X):
+        
+        if type(X).__name__ == 'VariationalLatentVariable':
+            self.update_added_loss_term('x_kl', X.x_kl_value)
+            
         mean_x = self.mean_module(X)
         covar_x = self.covar_module(X)
         dist = MultivariateNormal(mean_x, covar_x)
@@ -107,10 +83,7 @@ class BayesianGPLVM(ApproximateGP):
     
     def sample_variational_latent_dist(self):
         
-        epsilon = self.prior_x.sample_n(1)
-        # Reparameterisation trick - Q: Do I need to do this explicitly? or just calling sample_n() should 
-        # take care of it.
-        sample = epsilon*torch.exp(self.q_log_sigma) + self.q_mu
+        sample = self.q_x.rsample()
         return sample
     
     def get_trainable_param_names(self):
@@ -128,6 +101,4 @@ class BayesianGPLVM(ApproximateGP):
         print(table)
         print(f"Total Trainable Params: {total_params}")
     
-    def _init_pca(self):
-          U, S, V = torch.pca_lowrank(self.Y.T, q = self.latent_dim)
-          return torch.nn.Parameter(torch.matmul(self.Y.T, V[:,:self.latent_dim]))
+   
