@@ -7,6 +7,7 @@ Latent Variable class with sub-classes that determine type of inference for the 
 import gpytorch
 import torch
 from torch.distributions import kl_divergence
+from gpytorch.mlls.added_loss_term import AddedLossTerm
 
 class LatentVariable(gpytorch.Module):
     
@@ -57,9 +58,18 @@ class VariationalLatentVariable(LatentVariable):
         # Variational distribution over the latent variable q(x)
         self.q_x = torch.distributions.Normal(self.q_mu, torch.exp(self.q_log_sigma))
         
-        self.x_kl = kl_divergence(self.q_x, prior_x).sum()
+        self.x_kl = kl_gaussian_loss_term(self.q_x, self.prior_x)
 
     def forward(self):
         return self.q_x.rsample()
+    
+class kl_gaussian_loss_term(AddedLossTerm):
+    
+    def __init__(self, q_x, p_x):
+        self.q_x = q_x
+        self.p_x = p_x
+        
+    def loss(self):
+        return kl_divergence(self.q_x, self.p_x).sum()
     
         
