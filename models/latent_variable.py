@@ -55,14 +55,13 @@ class VariationalLatentVariable(LatentVariable):
 
         # Local variational params per latent point
         self.q_mu = torch.nn.Parameter(X_init)
-        self.q_log_sigma = torch.nn.Parameter(torch.tensor(torch.randn(n, dim)))
-       
+        self.q_sigma = torch.nn.Parameter(torch.nn.functional.softplus(torch.randn(n, dim)))       
         # This will add the KL divergence KL(q(X) || p(X)) to the loss
         self.register_added_loss_term("x_kl")
 
     def forward(self):
         # Variational distribution over the latent variable q(x)
-        q_x = torch.distributions.Normal(self.q_mu, torch.exp(self.q_log_sigma))
+        q_x = torch.distributions.Normal(self.q_mu, self.q_sigma)
         x_kl = kl_gaussian_loss_term(q_x, self.prior_x)
         self.update_added_loss_term('x_kl', x_kl)  # Update the KL term
         return q_x.rsample()

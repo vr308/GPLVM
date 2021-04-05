@@ -53,7 +53,7 @@ class My_GPLVM_Model(BayesianGPLVM):
         if pca == True:
              X_init = _init_pca(Y, latent_dim) # Initialise X to PCA 
         else:
-             X_init = torch.nn.Parameter(torch.zeros(Y.shape[1], latent_dim))
+             X_init = torch.nn.Parameter(torch.zeros(n, latent_dim))
           
         # LatentVariable (X)
         X = VariationalLatentVariable(Y.shape[0], latent_dim, X_init, prior_x)
@@ -81,7 +81,7 @@ if __name__ == '__main__':
     data_dim = Y.shape[1]
     latent_dim = 12
     n_inducing = 50
-    pca = True
+    pca = False
     
     # Model
     model = My_GPLVM_Model(N, data_dim, latent_dim, n_inducing, pca=pca)
@@ -94,13 +94,14 @@ if __name__ == '__main__':
     
     optimizer = torch.optim.Adam([
     {'params': model.parameters()},
+    {'params': likelihood.parameters()}
     ], lr=0.01)
     
     # Training loop - optimises the objective wrt kernel hypers, variational params and inducing inputs
     # using the optimizer provided.
     
     loss_list = []
-    iterator = trange(1000, leave=True)
+    iterator = trange(500, leave=True)
     for i in iterator:
        optimizer.zero_grad()
        sample = model.sample_latent_variable()
@@ -116,12 +117,12 @@ if __name__ == '__main__':
     plt.figure(figsize=(8, 6))
     colors = ['r', 'b', 'g']
  
-    X = model.q_mu.detach().numpy()
-    std = torch.exp(model.q_log_sigma).detach().numpy()
+    X = model.X.q_mu.detach().numpy()
+    std = model.X.q_sigma.detach().numpy()
     
     #X = model.X.detach().numpy()
     for i, label in enumerate(np.unique(labels)):
         X_i = X[labels == label]
         scale_i = std[labels == label]
-        plt.scatter(X_i[:, 1], X_i[:, 11], c=[colors[i]], label=label)
-        plt.errorbar(X_i[:, 1], X_i[:, 11], xerr=scale_i[:,1], yerr=scale_i[:,11], label=label,c=colors[i], fmt='none')
+        plt.scatter(X_i[:, 0], X_i[:, 1], c=[colors[i]], label=label)
+        plt.errorbar(X_i[:, 0], X_i[:, 1], xerr=scale_i[:,0], yerr=scale_i[:,1], label=label,c=colors[i], fmt='none')
