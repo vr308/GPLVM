@@ -80,7 +80,7 @@ if __name__ == '__main__':
     N = len(Y)
     data_dim = Y.shape[1]
     latent_dim = 12
-    n_inducing = 50
+    n_inducing = 25
     pca = False
     
     # Model
@@ -101,7 +101,7 @@ if __name__ == '__main__':
     # using the optimizer provided.
     
     loss_list = []
-    iterator = trange(500, leave=True)
+    iterator = trange(1000, leave=True)
     for i in iterator:
        optimizer.zero_grad()
        sample = model.sample_latent_variable()
@@ -124,5 +124,5 @@ if __name__ == '__main__':
     for i, label in enumerate(np.unique(labels)):
         X_i = X[labels == label]
         scale_i = std[labels == label]
-        plt.scatter(X_i[:, 0], X_i[:, 1], c=[colors[i]], label=label)
-        plt.errorbar(X_i[:, 0], X_i[:, 1], xerr=scale_i[:,0], yerr=scale_i[:,1], label=label,c=colors[i], fmt='none')
+        plt.scatter(X_i[:, 0], X_i[:, 8], c=[colors[i]], label=label)
+        plt.errorbar(X_i[:, 0], X_i[:, 8], xerr=scale_i[:,0], yerr=scale_i[:,8], label=label,c=colors[i], fmt='none')

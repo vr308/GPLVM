@@ -73,4 +73,4 @@ class kl_gaussian_loss_term(AddedLossTerm):
         self.p_x = p_x
         
     def loss(self):
-        return kl_divergence(self.q_x, self.p_x).sum()
+        return kl_divergence(self.q_x, self.p_x).sum(axis=0)/self.prior_x.batch_shape[0]
