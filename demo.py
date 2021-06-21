@@ -8,8 +8,6 @@ Demo script for bGPLVM Gaussian with different inference modes.
 # TODO's:
 # Snaphot param state and save
 # Flexible variational family
-# Amortised Inference
-# Missing data dimensions (masking)
 
 from data.unsupervised_datasets import load_unsupervised_data
 from models.bayesianGPLVM import BayesianGPLVM
